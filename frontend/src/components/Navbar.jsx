@@ -14,9 +14,13 @@ export default function Navbar() {
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-gray-950/80 backdrop-blur-xl">
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         {/* Brand */}
-        <Link to="/" className="flex items-center gap-2 group">
-          <span className="text-xl">✈️</span>
-          <span className="text-white font-black text-lg tracking-tight group-hover:text-brand-300 transition-colors">
+        <Link to="/" className="flex items-center gap-2.5 group">
+          <img
+            src="/logo.png"
+            alt="TravelMind Logo"
+            className="h-11 w-auto object-contain drop-shadow-[0_0_8px_rgba(139,92,246,0.5)] group-hover:scale-105 group-hover:drop-shadow-[0_0_14px_rgba(139,92,246,0.8)] transition-all duration-300"
+          />
+          <span className="text-white font-black text-xl tracking-tight group-hover:text-brand-300 transition-colors">
             TravelMind
           </span>
         </Link>

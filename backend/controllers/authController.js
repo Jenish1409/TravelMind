@@ -49,8 +49,8 @@ const register = [
 
             res.cookie('tm_token', token, {
                 httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
+                secure: true,
+                sameSite: 'none',
                 maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
             });
 
@@ -93,9 +93,9 @@ const login = [
 
             res.cookie('tm_token', token, {
                 httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
-                maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+                secure: true,
+                sameSite: 'none',
+                maxAge: 7 * 24 * 60 * 60 * 1000
             });
 
             res.json({
@@ -124,8 +124,9 @@ const getProfile = async (req, res) => {
 const logout = (req, res) => {
     res.cookie('tm_token', '', {
         httpOnly: true,
-        expires: new Date(0),
-        sameSite: 'strict'
+        secure: true,
+        sameSite: 'none',
+        expires: new Date(0)
     });
     res.json({ message: 'Logged out successfully' });
 };

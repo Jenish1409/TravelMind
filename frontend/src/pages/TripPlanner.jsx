@@ -122,7 +122,7 @@ export default function TripPlanner() {
         </div>
 
         {/* Personalization Banner */}
-        {personalization && (
+        {user && personalization && (
           <div className="glass-card p-4 mb-6 border-brand-400/30 bg-brand-500/5 flex items-start gap-3">
             <span className="text-2xl">🎯</span>
             <div>

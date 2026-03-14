@@ -18,6 +18,7 @@ const saveTrip = async (req, res) => {
       personalized = false,
       budget_estimate,
       best_time_to_visit,
+      budgetSplitGroups,
       startDate,
       endDate,
     } = req.body;
@@ -51,6 +52,7 @@ const saveTrip = async (req, res) => {
       existingTrip.personalized = personalized;
       existingTrip.budget_estimate = budget_estimate;
       existingTrip.best_time_to_visit = best_time_to_visit;
+      if (Array.isArray(budgetSplitGroups)) existingTrip.budgetSplitGroups = budgetSplitGroups;
       if (startDate) existingTrip.startDate = new Date(startDate);
       if (endDate) existingTrip.endDate = new Date(endDate);
 
@@ -80,6 +82,7 @@ const saveTrip = async (req, res) => {
       best_time_to_visit,
       itinerary,
       personalized,
+      budgetSplitGroups: Array.isArray(budgetSplitGroups) ? budgetSplitGroups : undefined,
       shareToken,
       isPublic: false,
       startDate: startDate ? new Date(startDate) : undefined,
@@ -320,4 +323,44 @@ const acceptInvitation = async (req, res) => {
   }
 };
 
-module.exports = { saveTrip, getUserTrips, getTripById, getPublicTrip, inviteCollaborator, getTripMembers, deleteTrip, getInvitations, acceptInvitation };
+// DELETE /api/trips/:trip_id/collaborators/:collaboratorId
+const removeCollaborator = async (req, res) => {
+  try {
+    const { trip_id, collaboratorId } = req.params;
+    const requesterId = req.user?.userId || req.query.userId;
+
+    if (!requesterId) {
+      return res.status(400).json({ error: 'userId is required.' });
+    }
+
+    const trip = await Trip.findOne({ trip_id });
+    if (!trip) return res.status(404).json({ error: 'Trip not found.' });
+
+    if (trip.user_id !== requesterId && trip.ownerId !== requesterId) {
+      return res.status(403).json({ error: 'Only the owner can remove collaborators.' });
+    }
+
+    const beforeCount = trip.collaborators.length;
+    trip.collaborators = trip.collaborators.filter((c) => String(c.userId) !== String(collaboratorId));
+    if (Array.isArray(trip.pendingInvites)) {
+      trip.pendingInvites = trip.pendingInvites.filter((p) => String(p.userId) !== String(collaboratorId));
+    }
+
+    if (trip.collaborators.length === beforeCount) {
+      return res.status(404).json({ error: 'Collaborator not found on this trip.' });
+    }
+
+    await trip.save();
+
+    return res.json({
+      message: 'Collaborator removed.',
+      trip_id,
+      collaborators: trip.collaborators,
+      pendingInvites: trip.pendingInvites,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to remove collaborator', details: error.message });
+  }
+};
+
+module.exports = { saveTrip, getUserTrips, getTripById, getPublicTrip, inviteCollaborator, getTripMembers, deleteTrip, getInvitations, acceptInvitation, removeCollaborator };

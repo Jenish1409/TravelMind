@@ -24,6 +24,12 @@ const daySchema = new mongoose.Schema({
   estimated_cost: String,
 });
 
+const budgetSplitGroupSchema = new mongoose.Schema({
+  id: Number,
+  name: String,
+  members: Number,
+}, { _id: false });
+
 const tripSchema = new mongoose.Schema({
   trip_id: {
     type: String,
@@ -77,6 +83,10 @@ const tripSchema = new mongoose.Schema({
     }],
     default: [],
   },
+  budgetSplitGroups: {
+    type: [budgetSplitGroupSchema],
+    default: [],
+  },
   pendingInvites: {
     type: [{
       userId: String,
@@ -97,6 +107,5 @@ const tripSchema = new mongoose.Schema({
 });
 
 tripSchema.index({ user_id: 1 });
-tripSchema.index({ shareToken: 1 });
 
 module.exports = mongoose.model('Trip', tripSchema);

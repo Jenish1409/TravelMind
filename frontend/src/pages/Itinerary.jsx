@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { addToWishlist, saveTrip, inviteCollaborator } from '../services/api'
+import { addToWishlist, saveTrip, inviteCollaborator, getTripById, removeCollaborator } from '../services/api'
 import BudgetChart from '../components/BudgetChart'
 
 const DAY_COLORS = [
@@ -32,6 +32,8 @@ export default function Itinerary() {
   const [inviting, setInviting] = useState(false)
   const [inviteSuccess, setInviteSuccess] = useState(false)
 
+  const [removingUserId, setRemovingUserId] = useState(null)
+
   useEffect(() => {
     const stored = sessionStorage.getItem('currentItinerary')
     if (stored) {
@@ -41,6 +43,18 @@ export default function Itinerary() {
       setTripId(data.tripId || null)
     }
   }, [])
+
+  useEffect(() => {
+    if (!tripId) return
+    ;(async () => {
+      try {
+        const trip = await getTripById(tripId)
+        setItinerary((prev) => ({ ...prev, ...trip }))
+      } catch {
+        // ignore
+      }
+    })()
+  }, [tripId])
 
   if (!itinerary) {
     return (
@@ -57,13 +71,36 @@ export default function Itinerary() {
 
   const { destination, days, budget_estimate, best_time_to_visit, itinerary: days_data, meta, ownerId, collaborators } = itinerary
   const isPersonalized = meta?.personalization?.isPersonalized
-  const userId = user?.user_id || 'guest'
+  const userId = user?.user_id || user?.userId || user?.id || meta?.userId || 'guest'
+  const tripOwnerId = ownerId || itinerary.ownerId || itinerary.user_id
 
-  const isOwner = ownerId === userId || itinerary.user_id === userId
-  const myRoleContext = collaborators?.find(c => c.userId === userId)?.role || 'read'
+  const isOwner = Boolean(userId && tripOwnerId && String(tripOwnerId) === String(userId))
+  const myRoleContext = collaborators?.find(c => String(c.userId) === String(userId))?.role || 'read'
   const isManager = myRoleContext === 'manager'
   const canEdit = isOwner || isManager
   const collaboratorCount = 1 + (collaborators?.length || 0)
+
+  const handleRemoveCollaborator = async (collaboratorId) => {
+    if (!tripId || !collaboratorId) return
+    if (!isOwner && !isManager) return
+    const ok = window.confirm('Remove this member from the trip?')
+    if (!ok) return
+
+    setRemovingUserId(collaboratorId)
+    try {
+      await removeCollaborator(tripId, collaboratorId, userId)
+      try {
+        const trip = await getTripById(tripId)
+        setItinerary((prev) => ({ ...prev, ...trip }))
+      } catch {
+        // ignore
+      }
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to remove member.')
+    } finally {
+      setRemovingUserId(null)
+    }
+  }
 
   // Save place to wishlist
   const handleSavePlace = async (place, dayNumber) => {
@@ -134,6 +171,26 @@ export default function Itinerary() {
       alert(err.response?.data?.error || 'Failed to invite collaborator.')
     } finally {
       setInviting(false)
+    }
+  }
+
+  const persistBudgetGroups = async (groups) => {
+    if (!canEdit || !tripId) return
+    try {
+      await saveTrip({
+        userId,
+        trip_id: tripId,
+        destination,
+        days,
+        itinerary: days_data,
+        budget_estimate,
+        best_time_to_visit,
+        personalized: isPersonalized || false,
+        budgetSplitGroups: groups,
+      })
+      setItinerary((prev) => ({ ...prev, budgetSplitGroups: groups }))
+    } catch {
+      // ignore
     }
   }
 
@@ -233,7 +290,19 @@ export default function Itinerary() {
                   {collaborators?.filter(c => c.role === 'manager').length > 0 ? (
                       <ul className="space-y-2">
                         {collaborators.filter(c => c.role === 'manager').map((c, i) => (
-                          <li key={i} className="text-white text-sm">{c.name || c.userId}</li>
+                          <li key={i} className="flex items-center justify-between gap-3">
+                            <span className="text-white text-sm">{c.name || c.userId}</span>
+                            {(isOwner || isManager) && (
+                              <button
+                                onClick={() => handleRemoveCollaborator(c.userId)}
+                                disabled={removingUserId === c.userId}
+                                className="text-xs px-2 py-1 rounded-md bg-red-500/10 border border-red-400/20 text-red-300 hover:bg-red-500/20 transition-all disabled:opacity-50"
+                                title="Remove member"
+                              >
+                                {removingUserId === c.userId ? '…' : 'Remove'}
+                              </button>
+                            )}
+                          </li>
                         ))}
                       </ul>
                   ) : <p className="text-gray-500 text-sm">None</p>}
@@ -244,7 +313,19 @@ export default function Itinerary() {
                   {collaborators?.filter(c => c.role === 'read').length > 0 ? (
                       <ul className="space-y-2">
                         {collaborators.filter(c => c.role === 'read').map((c, i) => (
-                          <li key={i} className="text-white text-sm">{c.name || c.userId}</li>
+                          <li key={i} className="flex items-center justify-between gap-3">
+                            <span className="text-white text-sm">{c.name || c.userId}</span>
+                            {(isOwner || isManager) && (
+                              <button
+                                onClick={() => handleRemoveCollaborator(c.userId)}
+                                disabled={removingUserId === c.userId}
+                                className="text-xs px-2 py-1 rounded-md bg-red-500/10 border border-red-400/20 text-red-300 hover:bg-red-500/20 transition-all disabled:opacity-50"
+                                title="Remove member"
+                              >
+                                {removingUserId === c.userId ? '…' : 'Remove'}
+                              </button>
+                            )}
+                          </li>
                         ))}
                       </ul>
                   ) : <p className="text-gray-500 text-sm">None</p>}
@@ -310,7 +391,13 @@ export default function Itinerary() {
         </div>
 
         {activeTab === 'budget' ? (
-          <BudgetChart itinerary={days_data} collaborators={collaborators} />
+          <BudgetChart
+            itinerary={days_data}
+            collaborators={collaborators}
+            canEdit={canEdit}
+            initialGroups={itinerary.budgetSplitGroups}
+            onPersistGroups={persistBudgetGroups}
+          />
         ) : (
           <>
             {/* Day tabs */}

@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   headers: { 'Content-Type': 'application/json' },
   timeout: 60000,
   withCredentials: true,
@@ -50,6 +50,9 @@ export const getInvitations = (userId) =>
 
 export const acceptInvitation = (data) =>
   api.post('/trips/accept-invite', data).then((r) => r.data)
+
+export const removeCollaborator = (tripId, collaboratorId, userId) =>
+  api.delete(`/trips/${tripId}/collaborators/${collaboratorId}`, { params: { userId } }).then((r) => r.data)
 
 // ─── User Preferences ───────────────────────────────────────────────────
 export const getUserPreferences = (userId) =>

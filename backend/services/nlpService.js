@@ -192,8 +192,9 @@ Generate a realistic schedule JSON. Structure:
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userMessage }
         ],
-        temperature: 0.1, // very low temp for strictness
-        max_tokens: 4000
+        temperature: 0.1,
+        max_tokens: 8000,
+        response_format: { type: 'json_object' }
     });
 
     let responseText = completion.choices[0]?.message?.content?.trim();
@@ -203,8 +204,20 @@ Generate a realistic schedule JSON. Structure:
     let parsedItinerary;
     try {
         parsedItinerary = JSON.parse(cleanedResponse);
-    } catch (err) {
-        throw new Error('Failed to parse final itinerary JSON');
+    } catch (firstErr) {
+        // LLM sometimes wraps JSON in prose — extract the raw JSON object using regex
+        const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            try {
+                parsedItinerary = JSON.parse(jsonMatch[0]);
+            } catch (secondErr) {
+                console.error('[NLP DEBUG] Could not parse itinerary even after regex extraction. Raw response:\n', cleanedResponse.slice(0, 500));
+                throw new Error('Failed to parse final itinerary JSON');
+            }
+        } else {
+            console.error('[NLP DEBUG] No JSON object found in LLM response. Raw response:\n', cleanedResponse.slice(0, 500));
+            throw new Error('Failed to parse final itinerary JSON');
+        }
     }
 
     // Phase 7 + Phase 8: Location Consistency & Coordinate Validation via OpenStreetMap
