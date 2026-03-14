@@ -16,7 +16,7 @@ export default function Login() {
         setLoading(true)
         try {
             const data = await loginUser(form)
-            login(data.token, data.user)
+            login(data.user)
             navigate('/dashboard')
         } catch (err) {
             setError(err?.response?.data?.error || 'Login failed. Check your credentials.')

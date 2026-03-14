@@ -47,9 +47,15 @@ const register = [
 
             const token = generateToken(user);
 
+            res.cookie('tm_token', token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+            });
+
             res.status(201).json({
                 message: 'Registration successful!',
-                token,
                 user: { user_id: user.user_id, name: user.name, email: user.email, travel_style: user.travel_style },
             });
         } catch (error) {
@@ -85,9 +91,15 @@ const login = [
 
             const token = generateToken(user);
 
+            res.cookie('tm_token', token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+            });
+
             res.json({
                 message: 'Login successful!',
-                token,
                 user: { user_id: user.user_id, name: user.name, email: user.email, travel_style: user.travel_style },
             });
         } catch (error) {
@@ -108,4 +120,14 @@ const getProfile = async (req, res) => {
     }
 };
 
-module.exports = { register, login, getProfile };
+// POST /api/auth/logout
+const logout = (req, res) => {
+    res.cookie('tm_token', '', {
+        httpOnly: true,
+        expires: new Date(0),
+        sameSite: 'strict'
+    });
+    res.json({ message: 'Logged out successfully' });
+};
+
+module.exports = { register, login, getProfile, logout };

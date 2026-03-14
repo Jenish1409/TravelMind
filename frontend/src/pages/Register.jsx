@@ -23,7 +23,7 @@ export default function Register() {
         setLoading(true)
         try {
             const data = await registerUser(form)
-            login(data.token, data.user)
+            login(data.user)
             navigate('/onboarding')
         } catch (err) {
             setError(err?.response?.data?.errors?.[0]?.msg || err?.response?.data?.error || 'Registration failed.')

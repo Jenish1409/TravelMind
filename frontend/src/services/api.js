@@ -4,13 +4,7 @@ const api = axios.create({
   baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
   timeout: 60000,
-})
-
-// Attach token on every request if available
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('tm_token')
-  if (token) config.headers['Authorization'] = `Bearer ${token}`
-  return config
+  withCredentials: true,
 })
 
 // ─── Auth ───────────────────────────────────────────────────────────────
@@ -19,6 +13,9 @@ export const registerUser = (data) =>
 
 export const loginUser = (data) =>
   api.post('/auth/login', data).then((r) => r.data)
+
+export const logoutUser = () =>
+  api.post('/auth/logout').then((r) => r.data)
 
 export const getProfile = () =>
   api.get('/auth/profile').then((r) => r.data)
