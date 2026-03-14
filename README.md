@@ -23,7 +23,7 @@ npm install
 Create `.env` file (copy from `.env.example`):
 ```env
 PORT=5000
-MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/travelmind?retryWrites=true&w=majority
+MONGODB_URI=mongodb+srv://<username>:<password>@travelmind-cluster.vtokiku.mongodb.net/test3?appName=travelmind-cluster
 GROQ_API_KEY=your_groq_api_key_here
 ```
 
