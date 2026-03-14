@@ -12,7 +12,7 @@ const TYPE_COLORS = {
 }
 
 export default function Wishlist() {
-    const { user } = useAuth()
+    const { user, loading: authLoading } = useAuth()
     const [items, setItems] = useState([])
     const [loading, setLoading] = useState(true)
     const [filter, setFilter] = useState('all')
@@ -20,12 +20,13 @@ export default function Wishlist() {
     const userId = user?.user_id
 
     useEffect(() => {
+        if (authLoading) return
         if (!userId) {
             setLoading(false)
             return
         }
         loadWishlist()
-    }, [userId])
+    }, [userId, authLoading])
 
     const loadWishlist = async () => {
         try {

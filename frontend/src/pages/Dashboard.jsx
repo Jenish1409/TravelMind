@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { getUserTrips, deleteTrip, getTripById, getInvitations, acceptInvitation } from '../services/api'
 
 export default function Dashboard() {
-    const { user, logout } = useAuth()
+    const { user, logout, loading: authLoading } = useAuth()
     const navigate = useNavigate()
     const [trips, setTrips] = useState([])
     const [invitations, setInvitations] = useState([])
@@ -13,12 +13,13 @@ export default function Dashboard() {
     const [acceptingId, setAcceptingId] = useState(null)
 
     useEffect(() => {
+        if (authLoading) return
         if (!user) {
             navigate('/login')
             return
         }
         loadTrips()
-    }, [user])
+    }, [user, authLoading])
 
     const loadTrips = async () => {
         try {
@@ -129,7 +130,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* Stats bar */}
-                <div className="grid grid-cols-3 gap-4 mb-10">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
                     {[
                         { label: 'Trips Planned', value: trips.length, icon: '🗺️' },
                         { label: 'Cities Visited', value: new Set(trips.map(t => t.destination)).size, icon: '🏙️' },

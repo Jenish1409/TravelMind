@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function Navbar() {
-  const { user, logout, isLoggedIn } = useAuth()
+  const { user, logout, isLoggedIn, loading } = useAuth()
   const navigate = useNavigate()
 
   const handleLogout = () => {
@@ -37,7 +37,11 @@ export default function Navbar() {
             </>
           )}
 
-          {isLoggedIn ? (
+          {loading ? (
+            <div className="flex items-center ml-3">
+              <div className="w-32 h-8 rounded-lg animate-pulse bg-white/5" />
+            </div>
+          ) : isLoggedIn ? (
             <div className="flex items-center gap-2 ml-3">
               <Link to="/dashboard" className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
                 <div className="w-6 h-6 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white text-xs font-bold">
