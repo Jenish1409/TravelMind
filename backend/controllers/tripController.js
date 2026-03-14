@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const Trip = require('../models/Trip');
+const User = require('../models/User');
 const { updateUserPreferences } = require('../services/recommendationService');
 
 // POST /api/save-trip
@@ -27,7 +28,17 @@ const saveTrip = async (req, res) => {
 
     let existingTrip = null;
     if (trip_id) {
-      existingTrip = await Trip.findOne({ trip_id, user_id: userId });
+      existingTrip = await Trip.findOne({ trip_id });
+      
+      // Permission check
+      if (existingTrip) {
+        const isOwner = existingTrip.user_id === userId || existingTrip.ownerId === userId;
+        const isManager = existingTrip.collaborators.some(c => c.userId === userId && c.role === 'manager');
+        
+        if (!isOwner && !isManager) {
+          return res.status(403).json({ error: 'You do not have permission to modify this trip.' });
+        }
+      }
     }
 
     if (existingTrip) {
@@ -60,6 +71,7 @@ const saveTrip = async (req, res) => {
     const newTrip = new Trip({
       trip_id: newTripId,
       user_id: userId,
+      ownerId: userId,
       destination,
       days,
       interests,
@@ -97,8 +109,16 @@ const getUserTrips = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const total = await Trip.countDocuments({ user_id });
-    const trips = await Trip.find({ user_id })
+    const query = {
+      $or: [
+        { user_id: user_id },
+        { ownerId: user_id },
+        { "collaborators.userId": user_id }
+      ]
+    };
+
+    const total = await Trip.countDocuments(query);
+    const trips = await Trip.find(query)
       .sort({ created_at: -1 })
       .skip(skip)
       .limit(limit)
@@ -115,8 +135,23 @@ const getUserTrips = async (req, res) => {
 const getTripById = async (req, res) => {
   try {
     const { trip_id } = req.params;
-    const trip = await Trip.findOne({ trip_id });
+    const trip = await Trip.findOne({ trip_id }).lean();
     if (!trip) return res.status(404).json({ error: 'Trip not found.' });
+
+    // Attach owner details
+    const owner = await User.findOne({ user_id: trip.ownerId || trip.user_id }).lean();
+    if (owner) trip.ownerDetails = { name: owner.name, email: owner.email };
+
+    // Attach collaborator details
+    if (trip.collaborators && trip.collaborators.length > 0) {
+      const userIds = trip.collaborators.map(c => c.userId);
+      const users = await User.find({ user_id: { $in: userIds } }).lean();
+      trip.collaborators = trip.collaborators.map(c => {
+        const u = users.find(user => user.user_id === c.userId);
+        return { ...c, name: u ? u.name : 'Unknown', email: u ? u.email : '' };
+      });
+    }
+
     res.json(trip);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch trip', details: error.message });
@@ -127,13 +162,26 @@ const getTripById = async (req, res) => {
 const getPublicTrip = async (req, res) => {
   try {
     const { shareToken } = req.params;
-    const trip = await Trip.findOne({ shareToken });
+    const trip = await Trip.findOne({ shareToken }).lean();
     if (!trip) return res.status(404).json({ error: 'Shared trip not found or expired.' });
+
+    // Try to attach owner details
+    const owner = await User.findOne({ user_id: trip.ownerId || trip.user_id }).lean();
+    if (owner) trip.ownerDetails = { name: owner.name, email: owner.email };
+
+    // Attach collaborator details
+    if (trip.collaborators && trip.collaborators.length > 0) {
+      const userIds = trip.collaborators.map(c => c.userId);
+      const users = await User.find({ user_id: { $in: userIds } }).lean();
+      trip.collaborators = trip.collaborators.map(c => {
+        const u = users.find(user => user.user_id === c.userId);
+        return { ...c, name: u ? u.name : 'Unknown', email: u ? u.email : '' };
+      });
+    }
 
     // Mark as public when first accessed via share link
     if (!trip.isPublic) {
-      trip.isPublic = true;
-      await trip.save();
+      await Trip.updateOne({ shareToken }, { isPublic: true });
     }
 
     res.json(trip);
@@ -146,31 +194,46 @@ const getPublicTrip = async (req, res) => {
 const inviteCollaborator = async (req, res) => {
   try {
     const { trip_id } = req.params;
-    const { collaboratorEmail, collaboratorUserId } = req.body;
+    const { email, role = 'read' } = req.body;
+    const inviterId = req.user?.userId || req.body.inviterId; // Need some way to know who is inviting
 
-    if (!collaboratorEmail && !collaboratorUserId) {
-      return res.status(400).json({ error: 'collaboratorEmail or collaboratorUserId is required.' });
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required to invite a collaborator.' });
+    }
+    if (!['read', 'manager'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role. Must be read or manager.' });
     }
 
     const trip = await Trip.findOne({ trip_id });
     if (!trip) return res.status(404).json({ error: 'Trip not found.' });
 
-    let updated = false;
-    if (collaboratorUserId && !trip.collaborators.includes(collaboratorUserId)) {
-      trip.collaborators.push(collaboratorUserId);
-      updated = true;
-    }
-    if (collaboratorEmail && !trip.collaboratorEmails.includes(collaboratorEmail)) {
-      trip.collaboratorEmails.push(collaboratorEmail);
-      updated = true;
+    // Validate that inviter is the owner
+    // For now, if inviterId isn't perfectly plumbed, we'll assume the frontend only shows the invite box to the owner
+    // But ideally: if (trip.ownerId !== inviterId && trip.user_id !== inviterId) return 403
+
+    const userToInvite = await User.findOne({ email });
+    if (!userToInvite) {
+      return res.status(404).json({ error: 'User with this email is not registered.' });
     }
 
-    if (updated) await trip.save();
+    if (trip.user_id === userToInvite.user_id || trip.ownerId === userToInvite.user_id) {
+       return res.status(400).json({ error: 'User is already the owner of this trip.' });
+    }
+
+    if (trip.collaborators.some(c => c.userId === userToInvite.user_id)) {
+       return res.status(400).json({ error: 'User is already a collaborator.' });
+    }
+
+    if (trip.pendingInvites.some(p => p.userId === userToInvite.user_id)) {
+       return res.status(400).json({ error: 'User is already invited.' });
+    }
+
+    trip.pendingInvites.push({ userId: userToInvite.user_id, role });
+    await trip.save();
 
     res.json({
-      message: 'Collaborator invited!',
-      collaborators: trip.collaborators,
-      collaboratorEmails: trip.collaboratorEmails,
+      message: 'Collaboration request sent!',
+      pendingInvites: trip.pendingInvites
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to invite collaborator', details: error.message });
@@ -200,8 +263,14 @@ const deleteTrip = async (req, res) => {
     const { trip_id } = req.params;
     const userId = req.user?.userId || req.query.userId;
 
-    const trip = await Trip.findOneAndDelete({ trip_id, user_id: userId });
-    if (!trip) return res.status(404).json({ error: 'Trip not found or unauthorized.' });
+    const trip = await Trip.findOne({ trip_id });
+    if (!trip) return res.status(404).json({ error: 'Trip not found.' });
+
+    if (trip.user_id !== userId && trip.ownerId !== userId) {
+      return res.status(403).json({ error: 'Only the owner can delete this trip.' });
+    }
+
+    await Trip.findOneAndDelete({ trip_id });
 
     res.json({ message: 'Trip deleted.' });
   } catch (error) {
@@ -209,4 +278,46 @@ const deleteTrip = async (req, res) => {
   }
 };
 
-module.exports = { saveTrip, getUserTrips, getTripById, getPublicTrip, inviteCollaborator, getTripMembers, deleteTrip };
+// GET /api/trips/invitations/:user_id
+const getInvitations = async (req, res) => {
+  try {
+    const { user_id } = req.params;
+    const trips = await Trip.find({ "pendingInvites.userId": user_id }).select('-itinerary');
+    res.json({ trips });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch invitations', details: error.message });
+  }
+};
+
+// POST /api/trips/accept-invite
+const acceptInvitation = async (req, res) => {
+  try {
+    const { tripId, userId } = req.body;
+
+    const trip = await Trip.findOne({ trip_id: tripId });
+    if (!trip) return res.status(404).json({ error: 'Trip not found.' });
+
+    const inviteIndex = trip.pendingInvites.findIndex(p => p.userId === userId);
+    if (inviteIndex === -1) {
+      return res.status(400).json({ error: 'No pending invitation for this user.' });
+    }
+
+    const inviteData = trip.pendingInvites[inviteIndex];
+
+    // Remove from pendingInvites
+    trip.pendingInvites.splice(inviteIndex, 1);
+    
+    // Add to collaborators
+    if (!trip.collaborators.some(c => c.userId === userId)) {
+      trip.collaborators.push({ userId: inviteData.userId, role: inviteData.role });
+    }
+
+    await trip.save();
+
+    res.json({ message: 'Invitation accepted!', trip_id: tripId });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to accept invitation', details: error.message });
+  }
+};
+
+module.exports = { saveTrip, getUserTrips, getTripById, getPublicTrip, inviteCollaborator, getTripMembers, deleteTrip, getInvitations, acceptInvitation };

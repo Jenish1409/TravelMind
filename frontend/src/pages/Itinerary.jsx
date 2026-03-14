@@ -28,6 +28,7 @@ export default function Itinerary() {
   // Collaborator panel
   const [showCollabPanel, setShowCollabPanel] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState('read')
   const [inviting, setInviting] = useState(false)
   const [inviteSuccess, setInviteSuccess] = useState(false)
 
@@ -54,9 +55,15 @@ export default function Itinerary() {
     )
   }
 
-  const { destination, days, budget_estimate, best_time_to_visit, itinerary: days_data, meta } = itinerary
+  const { destination, days, budget_estimate, best_time_to_visit, itinerary: days_data, meta, ownerId, collaborators } = itinerary
   const isPersonalized = meta?.personalization?.isPersonalized
   const userId = user?.user_id || 'guest'
+
+  const isOwner = ownerId === userId || itinerary.user_id === userId
+  const myRoleContext = collaborators?.find(c => c.userId === userId)?.role || 'read'
+  const isManager = myRoleContext === 'manager'
+  const canEdit = isOwner || isManager
+  const collaboratorCount = 1 + (collaborators?.length || 0)
 
   // Save place to wishlist
   const handleSavePlace = async (place, dayNumber) => {
@@ -118,12 +125,13 @@ export default function Itinerary() {
     if (!inviteEmail || !tripId) return
     setInviting(true)
     try {
-      await inviteCollaborator(tripId, { collaboratorEmail: inviteEmail })
+      await inviteCollaborator(tripId, { email: inviteEmail, role: inviteRole })
       setInviteSuccess(true)
       setInviteEmail('')
+      setInviteRole('read')
       setTimeout(() => setInviteSuccess(false), 3000)
-    } catch {
-      alert('Failed to invite collaborator.')
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to invite collaborator.')
     } finally {
       setInviting(false)
     }
@@ -183,53 +191,104 @@ export default function Itinerary() {
             className="btn-ghost text-sm py-2 px-4 flex items-center gap-1.5"
           >
             👥 Collaborate
+            {collaboratorCount > 1 && (
+                <span className="ml-1 bg-white/10 px-2 py-0.5 rounded-full text-xs font-semibold">{collaboratorCount}</span>
+            )}
           </button>
           <Link to="/map" className="btn-ghost text-sm py-2 px-4">🗺️ Map View</Link>
           <Link to="/wishlist" className="btn-ghost text-sm py-2 px-4">❤️ Wishlist</Link>
-          <button
-            onClick={() => {
-              navigate('/plan', {
-                state: {
-                  destination,
-                  days,
-                  budget: itinerary.budget,
-                  interests: itinerary.interests,
-                  tripId
-                }
-              })
-            }}
-            className="btn-ghost text-sm py-2 px-4"
-          >
-            ← Replan
-          </button>
+          {canEdit && (
+              <button
+                onClick={() => {
+                  navigate('/plan', {
+                    state: {
+                      destination,
+                      days,
+                      budget: itinerary.budget,
+                      interests: itinerary.interests,
+                      tripId
+                    }
+                  })
+                }}
+                className="btn-ghost text-sm py-2 px-4"
+              >
+                ← Replan
+              </button>
+          )}
         </div>
 
         {/* Collaborator Panel */}
         {showCollabPanel && (
           <div className="glass-card p-5 mb-6 border border-brand-400/20">
-            <h3 className="text-white font-semibold mb-3">👥 Invite Collaborator</h3>
-            <p className="text-gray-500 text-sm mb-3">Share this trip with a travel companion by email.</p>
-            <div className="flex gap-2">
-              <input
-                type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="companion@email.com"
-                className="input-field flex-1 py-2 text-sm"
-              />
-              <button
-                onClick={handleInvite}
-                disabled={!inviteEmail || inviting || !tripId}
-                className="btn-primary text-sm py-2 px-4 disabled:opacity-50"
-              >
-                {inviting ? '…' : 'Invite'}
-              </button>
+            <h3 className="text-white font-semibold mb-5 text-xl">👥 Trip Collaborators</h3>
+            
+            <div className="mb-8 grid gap-4 sm:grid-cols-3">
+               <div className="glass-card p-4 bg-white/5">
+                  <h4 className="text-brand-300 text-xs font-bold uppercase tracking-wide mb-3">Owner</h4>
+                  <p className="text-white text-sm">{meta?.ownerDetails?.name || 'Main Creator'}</p>
+               </div>
+               
+               <div className="glass-card p-4 bg-white/5">
+                  <h4 className="text-emerald-300 text-xs font-bold uppercase tracking-wide mb-3">Managers</h4>
+                  {collaborators?.filter(c => c.role === 'manager').length > 0 ? (
+                      <ul className="space-y-2">
+                        {collaborators.filter(c => c.role === 'manager').map((c, i) => (
+                          <li key={i} className="text-white text-sm">{c.name || c.userId}</li>
+                        ))}
+                      </ul>
+                  ) : <p className="text-gray-500 text-sm">None</p>}
+               </div>
+               
+               <div className="glass-card p-4 bg-white/5">
+                  <h4 className="text-gray-300 text-xs font-bold uppercase tracking-wide mb-3">Read Only</h4>
+                  {collaborators?.filter(c => c.role === 'read').length > 0 ? (
+                      <ul className="space-y-2">
+                        {collaborators.filter(c => c.role === 'read').map((c, i) => (
+                          <li key={i} className="text-white text-sm">{c.name || c.userId}</li>
+                        ))}
+                      </ul>
+                  ) : <p className="text-gray-500 text-sm">None</p>}
+               </div>
             </div>
-            {!tripId && (
-              <p className="text-amber-400 text-xs mt-2">⚠️ Save the trip first using the Share button to enable collaboration.</p>
-            )}
-            {inviteSuccess && (
-              <p className="text-emerald-400 text-xs mt-2">✅ Invitation recorded!</p>
+
+            {isOwner ? (
+              <div className="pt-5 border-t border-brand-400/10">
+                  <h4 className="text-white font-medium mb-3">Invite New Collaborator</h4>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <input
+                      type="email"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      placeholder="companion@email.com"
+                      className="input-field flex-1 py-2 text-sm"
+                    />
+                    <div className="flex gap-4 items-center px-2 bg-white/5 rounded-lg border border-white/10">
+                        <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                           <input type="radio" name="role" value="read" checked={inviteRole === 'read'} onChange={(e) => setInviteRole(e.target.value)} className="accent-brand-500" /> Read Only
+                        </label>
+                        <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                           <input type="radio" name="role" value="manager" checked={inviteRole === 'manager'} onChange={(e) => setInviteRole(e.target.value)} className="accent-brand-500" /> Manager
+                        </label>
+                    </div>
+                    <button
+                      onClick={handleInvite}
+                      disabled={!inviteEmail || inviting || !tripId}
+                      className="btn-primary text-sm py-2 px-6 disabled:opacity-50 whitespace-nowrap"
+                    >
+                      {inviting ? '…' : 'Send Invite'}
+                    </button>
+                  </div>
+                  {!tripId && (
+                    <p className="text-amber-400 text-xs mt-2">⚠️ Save the trip first using the Share button to enable collaboration.</p>
+                  )}
+                  {inviteSuccess && (
+                    <p className="text-emerald-400 text-xs mt-2">✅ Invitation recorded!</p>
+                  )}
+              </div>
+            ) : (
+                <div className="pt-5 border-t border-brand-400/10">
+                    <p className="text-gray-400 text-sm">You are a collaborator on this trip. Only the owner can invite new members.</p>
+                </div>
             )}
           </div>
         )}
@@ -251,7 +310,7 @@ export default function Itinerary() {
         </div>
 
         {activeTab === 'budget' ? (
-          <BudgetChart itinerary={days_data} />
+          <BudgetChart itinerary={days_data} collaborators={collaborators} />
         ) : (
           <>
             {/* Day tabs */}

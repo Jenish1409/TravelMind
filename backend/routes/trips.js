@@ -8,6 +8,8 @@ const {
     inviteCollaborator,
     getTripMembers,
     deleteTrip,
+    getInvitations,
+    acceptInvitation,
 } = require('../controllers/tripController');
 
 router.post('/save-trip', saveTrip);
@@ -16,6 +18,8 @@ router.get('/trips/public/:shareToken', getPublicTrip);
 router.get('/trips/detail/:trip_id', getTripById);
 router.post('/trips/:trip_id/invite', inviteCollaborator);
 router.get('/trips/:trip_id/members', getTripMembers);
+router.get('/trips/invitations/:user_id', getInvitations);
+router.post('/trips/accept-invite', acceptInvitation);
 router.delete('/trips/:trip_id', deleteTrip);
 
 module.exports = router;

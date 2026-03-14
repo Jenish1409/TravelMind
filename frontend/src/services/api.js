@@ -48,6 +48,12 @@ export const inviteCollaborator = (tripId, data) =>
 export const getTripMembers = (tripId) =>
   api.get(`/trips/${tripId}/members`).then((r) => r.data)
 
+export const getInvitations = (userId) =>
+  api.get(`/trips/invitations/${userId}`).then((r) => r.data)
+
+export const acceptInvitation = (data) =>
+  api.post('/trips/accept-invite', data).then((r) => r.data)
+
 // ─── User Preferences ───────────────────────────────────────────────────
 export const getUserPreferences = (userId) =>
   api.get('/user-preferences', { params: { userId } }).then((r) => r.data)

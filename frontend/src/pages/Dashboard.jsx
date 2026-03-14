@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { getUserTrips, deleteTrip, getTripById } from '../services/api'
+import { getUserTrips, deleteTrip, getTripById, getInvitations, acceptInvitation } from '../services/api'
 
 export default function Dashboard() {
     const { user, logout } = useAuth()
     const navigate = useNavigate()
     const [trips, setTrips] = useState([])
+    const [invitations, setInvitations] = useState([])
     const [loading, setLoading] = useState(true)
     const [deletingId, setDeletingId] = useState(null)
+    const [acceptingId, setAcceptingId] = useState(null)
 
     useEffect(() => {
         if (!user) {
@@ -21,12 +23,29 @@ export default function Dashboard() {
     const loadTrips = async () => {
         try {
             setLoading(true)
-            const data = await getUserTrips(user.user_id)
+            const [data, invData] = await Promise.all([
+                getUserTrips(user.user_id),
+                getInvitations(user.user_id)
+            ])
             setTrips(data.trips || [])
+            setInvitations(invData.trips || [])
         } catch {
             setTrips([])
+            setInvitations([])
         } finally {
             setLoading(false)
+        }
+    }
+
+    const handleAccept = async (tripId) => {
+        setAcceptingId(tripId)
+        try {
+            await acceptInvitation({ tripId, userId: user.user_id })
+            loadTrips()
+        } catch {
+            alert('Failed to accept invitation.')
+        } finally {
+            setAcceptingId(null)
         }
     }
 
@@ -61,10 +80,13 @@ export default function Dashboard() {
                 budget_estimate: fullTrip.budget_estimate,
                 best_time_to_visit: fullTrip.best_time_to_visit,
                 itinerary: fullTrip.itinerary || [],
+                ownerId: fullTrip.ownerId || fullTrip.user_id,
+                collaborators: fullTrip.collaborators || [],
                 meta: {
                     userId: user.user_id,
                     source: 'saved',
                     personalization: { isPersonalized: fullTrip.personalized },
+                    ownerDetails: fullTrip.ownerDetails || null,
                 },
             }
             sessionStorage.setItem('currentItinerary', JSON.stringify(sessionData))
@@ -120,6 +142,37 @@ export default function Dashboard() {
                         </div>
                     ))}
                 </div>
+
+                {/* Invitations list */}
+                {invitations.length > 0 && (
+                    <div className="mb-10">
+                        <h2 className="text-xl font-bold text-white mb-5">Pending Invitations</h2>
+                        <div className="space-y-4">
+                            {invitations.map((inv) => (
+                                <div key={inv.trip_id} className="glass-card-hover p-5 flex items-center gap-5 border border-brand-500/30">
+                                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500 to-amber-500 flex items-center justify-center text-white text-xl flex-shrink-0">
+                                        💌
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <h3 className="text-white font-semibold text-lg">{inv.destination}</h3>
+                                        <p className="text-gray-500 text-sm">
+                                            {inv.days} days
+                                        </p>
+                                    </div>
+                                    <div className="flex gap-2 flex-shrink-0">
+                                        <button
+                                            onClick={() => handleAccept(inv.trip_id)}
+                                            disabled={acceptingId === inv.trip_id}
+                                            className="btn-primary text-xs py-1.5 px-3"
+                                        >
+                                            {acceptingId === inv.trip_id ? 'Accepting...' : 'Accept Invite'}
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* Trip list */}
                 <h2 className="text-xl font-bold text-white mb-5">Your Trips</h2>

@@ -34,6 +34,9 @@ const tripSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  ownerId: {
+    type: String,
+  },
   destination: {
     type: String,
     required: true,
@@ -68,11 +71,21 @@ const tripSchema = new mongoose.Schema({
   },
   // Collaboration
   collaborators: {
-    type: [String], // array of user_ids
+    type: [{
+      userId: String,
+      role: { type: String, enum: ['read', 'manager'], default: 'read' }
+    }],
+    default: [],
+  },
+  pendingInvites: {
+    type: [{
+      userId: String,
+      role: { type: String, enum: ['read', 'manager'], default: 'read' }
+    }],
     default: [],
   },
   collaboratorEmails: {
-    type: [String], // pending invites
+    type: [String], // legacy pending invites
     default: [],
   },
   startDate: { type: Date },

@@ -27,7 +27,7 @@ function parseCost(str) {
     return match ? parseFloat(match[0]) : 0
 }
 
-export default function BudgetChart({ itinerary }) {
+export default function BudgetChart({ itinerary, collaborators = [] }) {
     if (!itinerary || itinerary.length === 0) return null
 
     // --- Daily spend bar chart ---
@@ -56,13 +56,22 @@ export default function BudgetChart({ itinerary }) {
         .slice(0, 6)
 
     const totalBudget = dailyData.reduce((s, d) => s + d.amount, 0)
+    const participants = 1 + (collaborators?.length || 0)
+    const perPerson = participants > 1 ? Math.round(totalBudget / participants) : totalBudget
 
     if (totalBudget === 0) return null
 
     return (
         <div className="glass-card p-6 mt-8">
             <h2 className="text-xl font-bold text-white mb-1">💰 Budget Breakdown</h2>
-            <p className="text-gray-500 text-sm mb-6">Estimated total: <span className="text-white font-semibold">₹{totalBudget.toLocaleString('en-IN')}</span></p>
+            <div className="flex flex-col gap-1 mb-6">
+                <p className="text-gray-500 text-sm">Estimated total: <span className="text-white font-semibold">₹{totalBudget.toLocaleString('en-IN')}</span></p>
+                {participants > 1 && (
+                    <p className="text-gray-500 text-sm">
+                        Expense per person ({participants} participants): <span className="text-emerald-400 font-semibold">₹{perPerson.toLocaleString('en-IN')}</span>
+                    </p>
+                )}
+            </div>
 
             <div className="grid md:grid-cols-2 gap-8">
                 {/* Bar chart — daily spending */}
